@@ -11,6 +11,7 @@ You can install it by running: pip install requests
 import requests
 import textwrap
 import sys
+import re
 
 # API endpoints for TheMealDB
 SEARCH_BY_INGREDIENT_URL = "https://www.themealdb.com/api/json/v1/1/filter.php"
@@ -62,6 +63,10 @@ def search_recipes_online(primary_ingredient):
         response = requests.get(SEARCH_BY_INGREDIENT_URL, params={'i': primary_ingredient})
         response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
         data = response.json()
+        if not data.get('meals'):
+             print(f"Found no recipes featuring '{primary_ingredient}'. Please try a different main ingredient.")
+             return None
+        print(f"Found {len(data['meals'])} recipes featuring '{primary_ingredient}'. Now checking against your other ingredients...")
         return data.get('meals')
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to the recipe API: {e}")
@@ -84,33 +89,61 @@ def get_recipe_details(meal_id):
         print(f"Error fetching recipe details: {e}")
         return None
 
+def is_ingredient_present(user_ing, recipe_ing_string):
+    """
+    Checks if a user's ingredient is present as a whole word in the recipe ingredient string.
+    This prevents "oil" from matching "boil" or "ham" from matching "shame".
+    Also handles simple plurals (e.g., "egg" will match "eggs").
+    """
+    # Create regex patterns to match the user ingredient as a whole word. \b is a word boundary.
+    pattern1 = r'\b' + re.escape(user_ing) + r's?\b'
+    
+    if re.search(pattern1, recipe_ing_string, re.IGNORECASE):
+        return True
+    return False
+
+def are_instructions_valid(instructions_str):
+    """
+    Checks if the recipe instructions are meaningful.
+    Args:
+        instructions_str (str): The instructions from the API.
+    Returns:
+        bool: True if instructions are valid, False otherwise.
+    """
+    if not instructions_str:
+        return False
+    # Check for very short instructions that are likely placeholders
+    if len(instructions_str.strip()) < 25:
+        return False
+    # Check for common placeholder text
+    if "make and enjoy" in instructions_str.lower():
+        return False
+    return True
+
 def filter_and_rank_recipes(recipes, user_ingredients_set):
     """
-    Filters for recipes where the user has all required ingredients (excluding common staples)
-    and then ranks them by how many of their ingredients are used.
-
-    Args:
-        recipes (list): A list of recipe summaries from the initial search.
-        user_ingredients_set (set): A set of ingredients the user has.
-
-    Returns:
-        A list of recipe dictionaries, sorted by the number of matching ingredients.
+    Analyzes recipes, prioritizing those that can be made with the user's ingredients.
+    It ranks them based on the number of missing ingredients.
     """
     if not recipes:
         return []
         
-    makeable_recipes = []
+    analyzed_recipes = []
     total_recipes = len(recipes)
-    print(f"\n--- Analyzing {total_recipes} recipes to see what you can make... ---")
-
+    
     for i, recipe_summary in enumerate(recipes, 1):
-        progress_text = f"Checking recipe {i}/{total_recipes}: {recipe_summary['strMeal'][:30]}..."
+        progress_text = f"Analyzing recipe {i}/{total_recipes}: {recipe_summary['strMeal'][:30]}..."
         sys.stdout.write('\r' + progress_text.ljust(60))
         sys.stdout.flush()
 
         details = get_recipe_details(recipe_summary['idMeal'])
         if not details:
             continue
+        
+        # --- NEW: Quality check for recipe instructions ---
+        instructions = details.get('strInstructions', '')
+        if not are_instructions_valid(instructions):
+            continue # Skip this recipe if the instructions are not valid
 
         recipe_ingredients_from_api = set()
         for j in range(1, 21):
@@ -123,41 +156,39 @@ def filter_and_rank_recipes(recipes, user_ingredients_set):
         unmatched_recipe_ingredients = set()
         matched_user_ingredients = set()
 
-        # For every ingredient in the recipe, check if the user has it or if it's a staple
         for recipe_ing in recipe_ingredients_from_api:
             is_matched = False
-            # Check if it's a staple first
+            # Check against staples first with more accurate matching
             for staple in COMMON_STAPLES:
-                if staple in recipe_ing:
+                if is_ingredient_present(staple, recipe_ing):
+                    if staple == 'butter' and 'peanut' in recipe_ing:
+                        continue
                     is_matched = True
                     break
             
-            # If not a staple, check against the user's ingredient list
+            # If not a staple, check against user's ingredients
             if not is_matched:
                 for user_ing in user_ingredients_set:
-                    if user_ing in recipe_ing:
+                    if is_ingredient_present(user_ing, recipe_ing):
                         is_matched = True
                         matched_user_ingredients.add(user_ing)
                         break
             
-            # If it's not a staple and not in the user's list, this recipe can't be made
             if not is_matched:
                 unmatched_recipe_ingredients.add(recipe_ing)
         
-        # If there are no unmatched ingredients, the user can make this recipe
-        if not unmatched_recipe_ingredients:
-            match_count = len(matched_user_ingredients)
-            details['match_count'] = match_count
-            details['total_user_ingredients'] = len(user_ingredients_set)
-            makeable_recipes.append(details)
+        details['match_count'] = len(matched_user_ingredients)
+        details['missing_ingredients'] = sorted(list(unmatched_recipe_ingredients))
+        details['missing_count'] = len(unmatched_recipe_ingredients)
+        details['total_user_ingredients'] = len(user_ingredients_set)
+        analyzed_recipes.append(details)
     
     sys.stdout.write('\r' + ' ' * 60 + '\r')
     sys.stdout.flush()
     print("--- Analysis complete! ---")
 
-    # Sort recipes by how many of the user's ingredients they use, descending
-    makeable_recipes.sort(key=lambda r: r['match_count'], reverse=True)
-    return makeable_recipes
+    analyzed_recipes.sort(key=lambda r: (r['missing_count'], -r['match_count']))
+    return analyzed_recipes
 
 
 def display_recipe_details(recipe):
@@ -186,7 +217,7 @@ def display_recipe_details(recipe):
 
     print("\nInstructions:")
     instructions = recipe.get('strInstructions', '')
-    steps = [step.strip() for step in instructions.split('\n') if step.strip()]
+    steps = [step.strip() for step in instructions.splitlines() if step.strip()]
 
     if not steps:
         print("  No instructions available.")
@@ -195,6 +226,7 @@ def display_recipe_details(recipe):
             print(f"\n--- Step {i} ---")
             for line in textwrap.wrap(step, width=70):
                 print(f"  {line}")
+        
         print("\n\n--- Recipe complete! Enjoy your meal! ---")
     print("\n" + "="*70)
 
@@ -216,32 +248,55 @@ def main():
         user_ingredients_set = set(all_user_ingredients)
         
         initial_recipes = search_recipes_online(primary_ingredient)
-        ranked_recipes = filter_and_rank_recipes(initial_recipes, user_ingredients_set)
+        if initial_recipes:
+            ranked_recipes = filter_and_rank_recipes(initial_recipes, user_ingredients_set)
+            suggested_recipes = [r for r in ranked_recipes if r['missing_count'] <= 3]
 
-        if not ranked_recipes:
-            print(f"\nSorry, couldn't find any recipes you can make with only those ingredients.")
-            print("Try adding more ingredients you have, or starting with a different main ingredient.")
-        else:
-            print("\nHere are the best recipes you can make right now:\n")
-            for i, recipe in enumerate(ranked_recipes, 1):
-                match_info = f"({recipe['match_count']}/{recipe['total_user_ingredients']} of your ingredients used)"
-                print(f"  {i}. {recipe['strMeal']} {match_info}")
+            if not suggested_recipes:
+                print(f"\nSorry, couldn't find any recipes that closely match your ingredients.")
+                print("Try adding more ingredients you have, or starting with a different main ingredient.")
+            else:
+                print("\nHere are the best recipes for you:\n")
+                for i, recipe in enumerate(suggested_recipes, 1):
+                    match_info = f"({recipe['match_count']}/{recipe['total_user_ingredients']} of your ingredients)"
+                    
+                    missing_info = ""
+                    if recipe['missing_count'] == 0:
+                        missing_info = " - You have all the ingredients!"
+                    else:
+                        missing_plural = "ingredient" if recipe['missing_count'] == 1 else "ingredients"
+                        missing_info = f" - You are missing {recipe['missing_count']} {missing_plural}."
 
-            try:
-                print("\nEnter the number of the recipe you want to see, or type 'new' to start over.")
-                choice = input("> ")
-                if choice.lower() == 'new':
-                    continue
+                    print(f"  {i}. {recipe['strMeal']} {match_info}{missing_info}")
+
+                # Improved input loop: keep asking until valid input is given.
+                recipe_chosen = False
+                while not recipe_chosen:
+                    print("\nEnter the number of the recipe you want to see, or type 'new' to start over.")
+                    choice = input("> ").strip().lower()
+                    if choice == 'new':
+                        break # Exits this input loop, the outer loop will 'continue'
+                    
+                    try:
+                        choice_index = int(choice) - 1
+                        if 0 <= choice_index < len(suggested_recipes):
+                            selected_recipe = suggested_recipes[choice_index]
+                            display_recipe_details(selected_recipe)
+                            recipe_chosen = True # A valid choice was made, exit input loop
+
+                            if selected_recipe['missing_count'] > 0:
+                                print("\n" + "-"*25 + " REMINDER " + "-"*25)
+                                print("You were missing the following ingredients for this recipe:")
+                                for item in selected_recipe['missing_ingredients']:
+                                    print(f"  - {item.title()}")
+                                print("-"*(52))
+                        else:
+                            print("Invalid number. Please try again.")
+                    except ValueError:
+                        print("Invalid input. Please enter a number or 'new'.")
                 
-                choice_index = int(choice) - 1
-                if 0 <= choice_index < len(ranked_recipes):
-                    display_recipe_details(ranked_recipes[choice_index])
-                    print("\nHappy cooking! Thanks for fighting food waste.\n")
-                    break
-                else:
-                    print("Invalid number. Please try again.")
-            except (ValueError, IndexError):
-                print("Invalid input. Please enter a number from the list or 'new'.")
+                if choice == 'new':
+                    continue
 
         print("\nWhat would you like to do next?")
         print("1. Search with new ingredients")
