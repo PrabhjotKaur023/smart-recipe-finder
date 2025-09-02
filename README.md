@@ -1,7 +1,8 @@
-#🍲 What's for Dinner? The Smart Recipe Finder!
+# 🍲 What's for Dinner? The Smart Recipe Finder!
+
 Ever stare into your fridge, full of ingredients but with no idea what to make? This tool is your new best friend! Just tell it what you have, and it'll intelligently search a massive online database to find the best possible recipes you can cook right now.
 
-✨ How It Works: A Step-by-Step Journey
+## ✨ How It Works: A Step-by-Step Journey
 This app walks you through a simple, interactive process to get you from ingredients to a full recipe.
 
 1. Tell Us What You've Got! 🥕🧅🧄
@@ -16,7 +17,7 @@ Now for the magic! The app searches for recipes featuring your star ingredient. 
 4. Your Recipe Awaits! 📜
 Choose the dish that tempts you the most from the ranked list, and the app will instantly fetch and display the complete recipe—ingredients, measurements, and step-by-step instructions. Time to start cooking!
 
-🚀 Ready to Cook?
+## 🚀 Ready to Cook?
 Getting started is easy.
 
 1. Prerequisites
@@ -42,13 +43,6 @@ The app will then guide you through the steps described above.
 Python: The core logic of the application.
 
 TheMealDB API: Our connection to a huge online cookbook for all the recipe data.
-
-Coding partner
-
-Show thinking
-Of course. Adding a section for feedback is a great way to encourage collaboration on your project.
-
-Here is a "Feedback and Contributions" section you can add to the end of your README.md file.
 
 ## 💡 Feedback & Contributions
 Feedback and contributions are welcome! This is a learning project, and I'm open to new ideas to make it better.
