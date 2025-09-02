@@ -16,6 +16,13 @@ import sys
 SEARCH_BY_INGREDIENT_URL = "https://www.themealdb.com/api/json/v1/1/filter.php"
 LOOKUP_BY_ID_URL = "https://www.themealdb.com/api/json/v1/1/lookup.php"
 
+# A set of common kitchen staples that are often omitted from user's ingredient lists
+COMMON_STAPLES = {
+    'water', 'salt', 'pepper', 'black pepper', 'oil', 'olive oil', 
+    'vegetable oil', 'sugar', 'butter', 'garlic', 'onion', 'flour',
+    'garlic powder', 'onion powder'
+}
+
 def get_main_ingredient():
     """
     Gets the main ingredient from the user.
@@ -79,8 +86,8 @@ def get_recipe_details(meal_id):
 
 def filter_and_rank_recipes(recipes, user_ingredients_set):
     """
-    Filters and ranks recipes based on how many user ingredients they contain.
-    This function makes an API call for each recipe to get its full details.
+    Filters for recipes where the user has all required ingredients (excluding common staples)
+    and then ranks them by how many of their ingredients are used.
 
     Args:
         recipes (list): A list of recipe summaries from the initial search.
@@ -92,12 +99,11 @@ def filter_and_rank_recipes(recipes, user_ingredients_set):
     if not recipes:
         return []
         
-    ranked_recipes = []
+    makeable_recipes = []
     total_recipes = len(recipes)
-    print(f"\n--- Analyzing {total_recipes} recipes to match all your ingredients... ---")
+    print(f"\n--- Analyzing {total_recipes} recipes to see what you can make... ---")
 
     for i, recipe_summary in enumerate(recipes, 1):
-        # Update progress on a single line
         progress_text = f"Checking recipe {i}/{total_recipes}: {recipe_summary['strMeal'][:30]}..."
         sys.stdout.write('\r' + progress_text.ljust(60))
         sys.stdout.flush()
@@ -114,30 +120,44 @@ def filter_and_rank_recipes(recipes, user_ingredients_set):
             else:
                 break
         
-        # Check for matches. We check if the user's ingredient is a substring
-        # of any ingredient in the recipe's list. e.g., "chicken" matches "chicken breast".
-        matched_ingredients = set()
-        for user_ingredient in user_ingredients_set:
-            for recipe_ingredient in recipe_ingredients_from_api:
-                if user_ingredient in recipe_ingredient:
-                    matched_ingredients.add(user_ingredient)
-                    break 
-        
-        match_count = len(matched_ingredients)
+        unmatched_recipe_ingredients = set()
+        matched_user_ingredients = set()
 
-        if match_count > 0:
+        # For every ingredient in the recipe, check if the user has it or if it's a staple
+        for recipe_ing in recipe_ingredients_from_api:
+            is_matched = False
+            # Check if it's a staple first
+            for staple in COMMON_STAPLES:
+                if staple in recipe_ing:
+                    is_matched = True
+                    break
+            
+            # If not a staple, check against the user's ingredient list
+            if not is_matched:
+                for user_ing in user_ingredients_set:
+                    if user_ing in recipe_ing:
+                        is_matched = True
+                        matched_user_ingredients.add(user_ing)
+                        break
+            
+            # If it's not a staple and not in the user's list, this recipe can't be made
+            if not is_matched:
+                unmatched_recipe_ingredients.add(recipe_ing)
+        
+        # If there are no unmatched ingredients, the user can make this recipe
+        if not unmatched_recipe_ingredients:
+            match_count = len(matched_user_ingredients)
             details['match_count'] = match_count
             details['total_user_ingredients'] = len(user_ingredients_set)
-            ranked_recipes.append(details)
+            makeable_recipes.append(details)
     
-    # Clear the progress line
     sys.stdout.write('\r' + ' ' * 60 + '\r')
     sys.stdout.flush()
     print("--- Analysis complete! ---")
 
-    # Sort recipes by match count, descending
-    ranked_recipes.sort(key=lambda r: r['match_count'], reverse=True)
-    return ranked_recipes
+    # Sort recipes by how many of the user's ingredients they use, descending
+    makeable_recipes.sort(key=lambda r: r['match_count'], reverse=True)
+    return makeable_recipes
 
 
 def display_recipe_details(recipe):
@@ -155,22 +175,17 @@ def display_recipe_details(recipe):
     print("="*70)
 
     print("\nIngredients:")
-    # The API stores ingredients in separate fields (strIngredient1, strMeasure1, etc.)
     for i in range(1, 21):
         ingredient = recipe.get(f'strIngredient{i}')
         measure = recipe.get(f'strMeasure{i}')
         if ingredient and ingredient.strip():
-            # Ensure measure is a string before printing
             measure_str = measure.strip() if measure and measure.strip() else ""
             print(f"  - {measure_str} {ingredient}")
         else:
-            # Stop when we run out of ingredients
             break
 
     print("\nInstructions:")
     instructions = recipe.get('strInstructions', '')
-    
-    # Split instructions into steps based on new lines and filter out any empty ones
     steps = [step.strip() for step in instructions.split('\n') if step.strip()]
 
     if not steps:
@@ -178,12 +193,9 @@ def display_recipe_details(recipe):
     else:
         for i, step in enumerate(steps, 1):
             print(f"\n--- Step {i} ---")
-            # Use textwrap for readability of each individual step
             for line in textwrap.wrap(step, width=70):
                 print(f"  {line}")
-        
         print("\n\n--- Recipe complete! Enjoy your meal! ---")
-
     print("\n" + "="*70)
 
 
@@ -200,7 +212,6 @@ def main():
         primary_ingredient = get_main_ingredient()
         available_ingredients = get_available_ingredients()
         
-        # Combine all ingredients for the ranking logic
         all_user_ingredients = [primary_ingredient] + available_ingredients
         user_ingredients_set = set(all_user_ingredients)
         
@@ -208,12 +219,12 @@ def main():
         ranked_recipes = filter_and_rank_recipes(initial_recipes, user_ingredients_set)
 
         if not ranked_recipes:
-            print(f"\nSorry, couldn't find any recipes that match your ingredients.")
-            print("Try using a different ingredient first, or check your spelling.")
+            print(f"\nSorry, couldn't find any recipes you can make with only those ingredients.")
+            print("Try adding more ingredients you have, or starting with a different main ingredient.")
         else:
-            print("\nHere are the best matches for your ingredients:\n")
+            print("\nHere are the best recipes you can make right now:\n")
             for i, recipe in enumerate(ranked_recipes, 1):
-                match_info = f"({recipe['match_count']}/{recipe['total_user_ingredients']} of your ingredients)"
+                match_info = f"({recipe['match_count']}/{recipe['total_user_ingredients']} of your ingredients used)"
                 print(f"  {i}. {recipe['strMeal']} {match_info}")
 
             try:
@@ -224,7 +235,6 @@ def main():
                 
                 choice_index = int(choice) - 1
                 if 0 <= choice_index < len(ranked_recipes):
-                    # Display the recipe and then exit the program
                     display_recipe_details(ranked_recipes[choice_index])
                     print("\nHappy cooking! Thanks for fighting food waste.\n")
                     break
