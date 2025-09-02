@@ -3,19 +3,18 @@
 Ever stare into your fridge, full of ingredients but with no idea what to make? This tool is your new best friend! Just tell it what you have, and it'll intelligently search a massive online database to find the best possible recipes you can cook right now.
 
 ## ✨ How It Works: A Step-by-Step Journey
-This app walks you through a simple, interactive process to get you from ingredients to a full recipe.
 
-1. Tell Us What You've Got! 🥕🧅🧄
-You start by listing all the ingredients currently in your kitchen. The more you list, the smarter the search!
+🍳 Smart Ingredient Search: Start with your star ingredient, and the app finds all possible recipes. Then, it cleverly filters that list using every other ingredient you have, giving you truly personalized results.
 
-2. Pick Your Star Ingredient 🌟
-To help our smart search, the app will ask you to pick the main ingredient you want to build your meal around from the list you just provided.
+🥇 Top Matches First: No more guessing! Recipes are ranked and scored. You'll see perfect matches at the top, followed by those needing just one or two extra items.
 
-3. Smart Scoring in Action! 🧠
-Now for the magic! The app searches for recipes featuring your star ingredient. But it doesn't stop there—it then scores each recipe by checking how many of your other ingredients match. The best matches rise to the top!
+📖 Quality Control: Say goodbye to confusing recipes! The app automatically filters out dishes with bad or incomplete instructions, showing you only clear, high-quality guides.
 
-4. Your Recipe Awaits! 📜
-Choose the dish that tempts you the most from the ranked list, and the app will instantly fetch and display the complete recipe—ingredients, measurements, and step-by-step instructions. Time to start cooking!
+🎯 Precision Matching: The search is smart enough to know the difference between "ham" and "shame." It looks for whole words to prevent silly mistakes and give you hyper-accurate matches.
+
+🧂 Pantry Staples Included: Don't worry about listing salt, pepper, or oil. The app knows you probably have these and won't penalize a recipe for including them.
+
+💻 Simple Guided Process: A friendly command-line prompt walks you through each step, from entering ingredients to choosing your final recipe. It's easy and intuitive!
 
 ## 🚀 Ready to Cook?
 Getting started is easy.
